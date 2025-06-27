@@ -53,13 +53,8 @@ jobs:
       - name: Run tests
         id: run-tests
         env:
-          UNREAL_VERSION_INPUT: ${{ inputs.unreal-version }}
+          EDITOR_BINARY: ${{ inputs.unreal-version == '4.27' && 'UE4Editor.exe' || 'UnrealEditor.exe' }}
         run: |
-          if ($env:UNREAL_VERSION_INPUT -eq "4.27") {
-            $env:EDITOR_BINARY = "UE4Editor.exe"
-          } else {
-            $env:EDITOR_BINARY = "UnrealEditor.exe"
-          }
           docker exec unreal C:\UnrealEngine\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun `
             -project=C:/workspace/checkout/sample/SentryPlayground.uproject `
             -archivedirectory=C:/workspace/checkout/sample/Builds `

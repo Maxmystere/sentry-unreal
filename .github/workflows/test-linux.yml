@@ -73,16 +73,13 @@ jobs:
             mkdir -p /etc/pki/tls/certs ;
             cp /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt "
 
+      # Chown some paths to the GH user to make UE5 work properly. We can't just chown the whole UnrealEngine or
+      # docker would implicitly have to copy it to the container and we would run out of space on the GH runner.
       - name: Chown Docker container paths
         env:
-          UNREAL_VERSION_INPUT: ${{ inputs.unreal-version }}
+          ENGINE_PATH: ${{ inputs.unreal-version == '4.27' && 'Programs/UnrealPak/Saved' || 'Binaries/ThirdParty/DotNet' }}
         run: |
           uid=$(id -u) # the GH action user ID
-          if [ "$UNREAL_VERSION_INPUT" = "4.27" ]; then
-            ENGINE_PATH="Programs/UnrealPak/Saved"
-          else
-            ENGINE_PATH="Binaries/ThirdParty/DotNet"
-          fi
           docker exec --user root unreal bash -c "
             chown -R $uid /home/ue4/UnrealEngine/Engine/Binaries/ThirdParty/Mono/Linux ;
             chown -R $uid /home/ue4/UnrealEngine/Engine/\"$ENGINE_PATH\" ;
@@ -113,13 +110,8 @@ jobs:
       - name: Run tests
         id: run-tests
         env:
-          UNREAL_VERSION_INPUT: ${{ inputs.unreal-version }}
+          EDITOR_BINARY: ${{ inputs.unreal-version == '4.27' && 'UE4Editor' || 'UnrealEditor' }}
         run: |
-          if [ "$UNREAL_VERSION_INPUT" = "4.27" ]; then
-            EDITOR_BINARY="UE4Editor"
-          else
-            EDITOR_BINARY="UnrealEditor"
-          fi
           docker exec -w /workspace/checkout/sample unreal bash -c "
             ls -al /workspace/checkout/sample/Plugins/sentry "
           docker exec -w /workspace/checkout/sample unreal /home/ue4/UnrealEngine/Engine/Build/BatchFiles/RunUAT.sh BuildCookRun \
@@ -143,7 +135,7 @@ jobs:
             -Unattended \
             -NoPause \
             -NoSplash \
-            -NullRHI
+            -NullRHI          
 
       - name: Collect sample test info
         if: ${{ always() && steps.run-tests.outcome == 'failure' }}
