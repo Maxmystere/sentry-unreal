@@ -54,9 +54,9 @@ jobs:
         id: set_vs_version
         shell: bash
         env:
-          UE_VERSION: ${{ inputs.ue_version }}
+          UE_VERSION_INPUT: ${{ inputs.ue_version }}
         run: |
-          if [[ "$UE_VERSION" == "4.27" || "$UE_VERSION" == "5.0" || "$UE_VERSION" == "5.1" ]]; then
+          if [[ "$UE_VERSION_INPUT" == "4.27" || "$UE_VERSION_INPUT" == "5.0" || "$UE_VERSION_INPUT" == "5.1" ]]; then
             echo "vs_version=2019" >> $GITHUB_OUTPUT
           else
             echo "vs_version=2022" >> $GITHUB_OUTPUT
