@@ -52,6 +52,7 @@ public:
 	static const bool IsMarketplace;
 
 private:
+	static FSentryModule* Myself;
 	USentrySettings* SentrySettings = nullptr;
 
 	void* mDllHandleSentry;

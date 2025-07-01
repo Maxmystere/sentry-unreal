@@ -31,6 +31,7 @@ public:
 	virtual void AddBreadcrumbWithParams(const FString& Message, const FString& Category, const FString& Type, const TMap<FString, FString>& Data, ESentryLevel Level) = 0;
 	virtual void ClearBreadcrumbs() = 0;
 	virtual USentryId* CaptureMessage(const FString& message, ESentryLevel level) = 0;
+    virtual void CaptureMessageNoReturn(const FString& message, ESentryLevel level) = 0;
 	virtual USentryId* CaptureMessageWithScope(const FString& message, const FConfigureScopeNativeDelegate& onConfigureScope, ESentryLevel level) = 0;
 	virtual USentryId* CaptureEvent(USentryEvent* event) = 0;
 	virtual USentryId* CaptureEventWithScope(USentryEvent* event, const FConfigureScopeNativeDelegate& onConfigureScope) = 0;

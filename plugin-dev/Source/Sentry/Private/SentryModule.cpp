@@ -17,8 +17,11 @@ const FName FSentryModule::ModuleName = "Sentry";
 
 const bool FSentryModule::IsMarketplace = false;
 
+FSentryModule* FSentryModule::Myself = nullptr;
+
 void FSentryModule::StartupModule()
 {
+	FSentryModule::Myself = this;
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
 	SentrySettings = NewObject<USentrySettings>(GetTransientPackage(), "SentrySettings", RF_Standalone);
 	SentrySettings->AddToRoot();
@@ -72,6 +75,10 @@ void FSentryModule::ShutdownModule()
 
 FSentryModule& FSentryModule::Get()
 {
+	if (Myself)
+	{
+		return *Myself;
+	}
 	return FModuleManager::LoadModuleChecked<FSentryModule>(ModuleName);
 }
 

@@ -136,6 +136,12 @@ USentryId* SentrySubsystemAndroid::CaptureMessage(const FString& message, ESentr
 	return SentryConvertorsAndroid::SentryIdToUnreal(*id);
 }
 
+void SentrySubsystemAndroid::CaptureMessageNoReturn(const FString& message, ESentryLevel level)
+{
+    auto id = FSentryJavaObjectWrapper::CallStaticObjectMethod<jobject>(SentryJavaClasses::Sentry, "captureMessage", "(Ljava/lang/String;Lio/sentry/SentryLevel;)Lio/sentry/protocol/SentryId;",
+        *FSentryJavaObjectWrapper::GetJString(message), SentryConvertorsAndroid::SentryLevelToNative(level)->GetJObject());
+}
+
 USentryId* SentrySubsystemAndroid::CaptureMessageWithScope(const FString& message, const FConfigureScopeNativeDelegate& onConfigureScope, ESentryLevel level)
 {
 	USentryScopeCallbackAndroid* scopeCallback = NewObject<USentryScopeCallbackAndroid>();

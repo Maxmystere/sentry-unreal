@@ -312,6 +312,18 @@ USentryId* SentrySubsystemDesktop::CaptureMessage(const FString& message, ESentr
 	return SentryConvertorsDesktop::SentryIdToUnreal(id);
 }
 
+void SentrySubsystemDesktop::CaptureMessageNoReturn(const FString& message, ESentryLevel level)
+{
+    sentry_value_t sentryEvent = sentry_value_new_message_event(SentryConvertorsDesktop::SentryLevelToNative(level), nullptr, TCHAR_TO_ANSI(*message));
+
+    if (isStackTraceEnabled)
+    {
+        sentry_value_set_stacktrace(sentryEvent, nullptr, 0);
+    }
+
+    sentry_capture_event(sentryEvent);
+}
+
 USentryId* SentrySubsystemDesktop::CaptureMessageWithScope(const FString& message, const FConfigureScopeNativeDelegate& onScopeConfigure, ESentryLevel level)
 {
 	FScopeLock Lock(&CriticalSection);

@@ -49,6 +49,12 @@ void SentrySubsystemApple::InitWithSettings(const USentrySettings* settings, USe
 		options.debug = settings->Debug;
 		options.sampleRate = [NSNumber numberWithFloat:settings->SampleRate];
 		options.maxBreadcrumbs = settings->MaxBreadcrumbs;
+		options.appHangTimeoutInterval = 5;
+        NSRegularExpression* allowPowerzRegex =
+            [NSRegularExpression regularExpressionWithPattern:@".*\\.powerz\\.(fr|tech)"
+                                                      options:NSRegularExpressionCaseInsensitive
+                                                        error:NULL];
+        options.failedRequestTargets = @[ allowPowerzRegex ];
 		options.sendDefaultPii = settings->SendDefaultPii;
 #if SENTRY_UIKIT_AVAILABLE
 		options.attachScreenshot = settings->AttachScreenshot;
@@ -142,6 +148,14 @@ USentryId* SentrySubsystemApple::CaptureMessage(const FString& message, ESentryL
 	}];
 
 	return SentryConvertorsApple::SentryIdToUnreal(id);
+}
+
+void SentrySubsystemApple::CaptureMessageNoReturn(const FString& message, ESentryLevel level)
+{
+    SentryId* id = [SENTRY_APPLE_CLASS(SentrySDK) captureMessage:message.GetNSString()
+                                                  withScopeBlock:^(SentryScope* scope) {
+                                                    [scope setLevel:SentryConvertorsApple::SentryLevelToNative(level)];
+                                                  }];
 }
 
 USentryId* SentrySubsystemApple::CaptureMessageWithScope(const FString& message, const FConfigureScopeNativeDelegate& onConfigureScope, ESentryLevel level)

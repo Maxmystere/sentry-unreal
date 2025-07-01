@@ -238,6 +238,14 @@ USentryId* USentrySubsystem::CaptureMessage(const FString& Message, ESentryLevel
 	return SubsystemNativeImpl->CaptureMessage(Message, Level);
 }
 
+void USentrySubsystem::CaptureMessageNoReturn(const FString& Message, ESentryLevel Level)
+{
+    if (!SubsystemNativeImpl || !SubsystemNativeImpl->IsEnabled())
+        return;
+
+    SubsystemNativeImpl->CaptureMessageNoReturn(Message, Level);
+}
+
 USentryId* USentrySubsystem::CaptureMessageWithScope(const FString& Message, const FConfigureScopeDelegate& OnConfigureScope, ESentryLevel Level)
 {
 	return CaptureMessageWithScope(Message, FConfigureScopeNativeDelegate::CreateUFunction(const_cast<UObject*>(OnConfigureScope.GetUObject()), OnConfigureScope.GetFunctionName()), Level);

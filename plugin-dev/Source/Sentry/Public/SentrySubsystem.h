@@ -111,6 +111,12 @@ public:
 	USentryId* CaptureMessage(const FString& Message, ESentryLevel Level = ESentryLevel::Info);
 
 	/**
+     * POWERZ
+     */
+    UFUNCTION()
+    void CaptureMessageNoReturn(const FString& Message, ESentryLevel Level = ESentryLevel::Info);
+
+	/**
 	 * Captures the message with a configurable scope.
 	 * This allows modifying a scope without affecting other events.
 	 * Changing message level during scope configuration will override Level parameter value.
