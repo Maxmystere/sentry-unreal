@@ -1,26 +1,28 @@
-// Copyright (c) 2022 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #include "SentrySettings.h"
-#include "SentryDefines.h"
 #include "SentryBeforeSendHandler.h"
+#include "SentryDefines.h"
 #include "SentryTraceSampler.h"
 
-#include "Misc/Paths.h"
-#include "Misc/ConfigCacheIni.h"
 #include "Misc/App.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/Paths.h"
 
 USentrySettings::USentrySettings(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 	, InitAutomatically(true)
 	, Dsn()
+	, EditorDsn()
 	, Debug(true)
-	, EnableAutoCrashCapturing(true)
 	, Environment(GetDefaultEnvironmentName())
 	, SampleRate(1.0f)
 	, EnableAutoLogAttachment(false)
 	, AttachStacktrace(true)
-	, SendDefaultPii(false) 
+	, SendDefaultPii(false)
 	, AttachScreenshot(false)
+	, AttachGpuDump(true)
+	, MaxAttachmentSize(20 * 1024 * 1024)
 	, MaxBreadcrumbs(100)
 	, EnableAutoSessionTracking(true)
 	, SessionTimeout(30000)
@@ -28,15 +30,20 @@ USentrySettings::USentrySettings(const FObjectInitializer& ObjectInitializer)
 	, UseProxy(false)
 	, ProxyUrl()
 	, BeforeSendHandler(USentryBeforeSendHandler::StaticClass())
+	, BeforeBreadcrumbHandler(nullptr)
+	, EnableAutoCrashCapturing(true)
+	, DatabaseLocation(ESentryDatabaseLocation::ProjectUserDirectory)
+	, CrashpadWaitForUpload(false)
 	, EnableAppNotRespondingTracking(false)
 	, EnableTracing(false)
 	, SamplingType(ESentryTracesSamplingType::UniformSampleRate)
 	, TracesSampleRate(0.0f)
 	, TracesSampler(USentryTraceSampler::StaticClass())
 	, EnableForPromotedBuildsOnly(false)
-	, UploadSymbolsAutomatically(false)	
+	, UploadSymbolsAutomatically(false)
 	, IncludeSources(false)
 	, DiagnosticLevel(ESentryCliLogLevel::Info)
+	, UseLegacyGradlePlugin(false)
 	, CrashReporterUrl()
 	, bIsDirty(false)
 {
@@ -65,6 +72,7 @@ void USentrySettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChan
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, OrgName) ||
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, AuthToken) ||
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, IncludeSources) ||
+		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, UseLegacyGradlePlugin) ||
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, DiagnosticLevel) ||
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, CrashReporterUrl))
 	{
@@ -82,7 +90,7 @@ FString USentrySettings::GetFormattedReleaseName()
 
 	FString Version = TEXT("");
 	GConfig->GetString(TEXT("/Script/EngineSettings.GeneralProjectSettings"), TEXT("ProjectVersion"), Version, GGameIni);
-	if(!Version.IsEmpty())
+	if (!Version.IsEmpty())
 	{
 		FormattedReleaseName = FString::Printf(TEXT("%s@%s"), *FormattedReleaseName, *Version);
 	}
@@ -108,7 +116,7 @@ FString USentrySettings::GetDefaultEnvironmentName()
 	}
 
 	// Check Shipping configuration separately for backward compatibility
-	if(FApp::GetBuildConfiguration() == EBuildConfiguration::Shipping)
+	if (FApp::GetBuildConfiguration() == EBuildConfiguration::Shipping)
 	{
 		return TEXT("Release");
 	}
@@ -151,7 +159,7 @@ void USentrySettings::CheckLegacySettings()
 
 	const FString DsnLegacyKey = TEXT("DsnUrl");
 	FString DsnLegacyValue = TEXT("");
-	if(GConfig->GetString(*SentrySection, *DsnLegacyKey, DsnLegacyValue, *ConfigFilename))
+	if (GConfig->GetString(*SentrySection, *DsnLegacyKey, DsnLegacyValue, *ConfigFilename))
 	{
 		Dsn = DsnLegacyValue;
 		GConfig->SetString(*SentrySection, TEXT("Dsn"), *Dsn, *ConfigFilename);
@@ -161,7 +169,7 @@ void USentrySettings::CheckLegacySettings()
 
 	const FString DebugLegacyKey = TEXT("EnableVerboseLogging");
 	bool DebugLegacyValue;
-	if(GConfig->GetBool(*SentrySection, *DebugLegacyKey, DebugLegacyValue, *ConfigFilename))
+	if (GConfig->GetBool(*SentrySection, *DebugLegacyKey, DebugLegacyValue, *ConfigFilename))
 	{
 		Debug = DebugLegacyValue;
 		GConfig->SetBool(*SentrySection, TEXT("Debug"), Debug, *ConfigFilename);
@@ -171,7 +179,7 @@ void USentrySettings::CheckLegacySettings()
 
 	const FString AttachStacktraceLegacyKey = TEXT("EnableStackTrace");
 	bool AttachStacktraceLegacyValue;
-	if(GConfig->GetBool(*SentrySection, *AttachStacktraceLegacyKey, AttachStacktraceLegacyValue, *ConfigFilename))
+	if (GConfig->GetBool(*SentrySection, *AttachStacktraceLegacyKey, AttachStacktraceLegacyValue, *ConfigFilename))
 	{
 		AttachStacktrace = AttachStacktraceLegacyValue;
 		GConfig->SetBool(*SentrySection, TEXT("AttachStacktrace"), AttachStacktrace, *ConfigFilename);

@@ -1,9 +1,12 @@
-﻿// Copyright (c) 2023 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
+
+#include "SentryImplWrapper.h"
+
 #include "SentryTransaction.generated.h"
 
 class ISentryTransaction;
@@ -11,22 +14,31 @@ class USentrySpan;
 
 /**
  * Representation of an activity to measure or track.
+ *
+ * NOTE: USentryTransaction should not be constructed with NewObject<...>() etc., and should instead
+ *       only be created by calling methods like StartTransaction(...) on USentrySubsystem.
  */
-UCLASS(BlueprintType)
-class SENTRY_API USentryTransaction : public UObject
+UCLASS(BlueprintType, NotBlueprintable, HideDropdown)
+class SENTRY_API USentryTransaction : public UObject, public TSentryImplWrapper<ISentryTransaction, USentryTransaction>
 {
 	GENERATED_BODY()
 
 public:
-	USentryTransaction();
-
-	/** . */
+	/** Starts a new child span. */
 	UFUNCTION(BlueprintCallable, Category = "Sentry")
-	USentrySpan* StartChild(const FString& Operation, const FString& Description);
+	USentrySpan* StartChildSpan(const FString& Operation, const FString& Description);
+
+	/** Starts a new child span with timestamp. */
+	UFUNCTION(BlueprintCallable, Category = "Sentry")
+	USentrySpan* StartChildSpanWithTimestamp(const FString& Operation, const FString& Description, int64 Timestamp);
 
 	/** Finishes and sends a transaction to Sentry. */
 	UFUNCTION(BlueprintCallable, Category = "Sentry")
 	void Finish();
+
+	/** Finishes with timestamp and sends a transaction to Sentry. */
+	UFUNCTION(BlueprintCallable, Category = "Sentry")
+	void FinishWithTimestamp(int64 Timestamp);
 
 	/** Checks whether the transaction finished. */
 	UFUNCTION(BlueprintPure, Category = "Sentry")
@@ -52,9 +64,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sentry")
 	void RemoveData(const FString& key);
 
-	void InitWithNativeImpl(TSharedPtr<ISentryTransaction> transactionImpl);
-	TSharedPtr<ISentryTransaction> GetNativeImpl();
-
-private:
-	TSharedPtr<ISentryTransaction> SentryTransactionNativeImpl;
+	/** Gets trace information that could be sent as a `sentry-trace` header */
+	UFUNCTION(BlueprintCallable, Category = "Sentry")
+	void GetTrace(FString& name, FString& value);
 };

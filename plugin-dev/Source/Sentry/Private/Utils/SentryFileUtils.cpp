@@ -1,10 +1,10 @@
-// Copyright (c) 2023 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #include "SentryFileUtils.h"
 #include "SentryDefines.h"
 
-#include "HAL/FileManager.h"
 #include "GenericPlatform/GenericPlatformOutputDevices.h"
+#include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 
 struct FSentrySortFileByDatePredicate
@@ -17,6 +17,11 @@ struct FSentrySortFileByDatePredicate
 	}
 };
 
+FString SentryFileUtils::GetGameLogName()
+{
+	return FPaths::GetCleanFilename(FGenericPlatformOutputDevices::GetAbsoluteLogFilename());
+}
+
 FString SentryFileUtils::GetGameLogPath()
 {
 	return IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*FGenericPlatformOutputDevices::GetAbsoluteLogFilename());
@@ -27,7 +32,7 @@ FString SentryFileUtils::GetGameLogBackupPath()
 	TArray<FString> GameLogBackupFiles;
 	IFileManager::Get().FindFiles(GameLogBackupFiles, *FString::Printf(TEXT("%s*-backup-*.*"), *FPaths::ProjectLogDir()), true, false);
 
-	if(GameLogBackupFiles.Num() == 0)
+	if (GameLogBackupFiles.Num() == 0)
 	{
 		UE_LOG(LogSentrySdk, Log, TEXT("There are no game log backups available."));
 		return FString("");
@@ -35,11 +40,31 @@ FString SentryFileUtils::GetGameLogBackupPath()
 
 	for (int i = 0; i < GameLogBackupFiles.Num(); ++i)
 	{
-		FString GameLogFullPath = IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*(FPaths::ProjectLogDir() / GameLogBackupFiles[i]));
-		GameLogBackupFiles[i] = GameLogFullPath;
+		GameLogBackupFiles[i] = FPaths::ProjectLogDir() / GameLogBackupFiles[i];
 	}
 
 	GameLogBackupFiles.Sort(FSentrySortFileByDatePredicate());
 
-	return GameLogBackupFiles[0];
+	return IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*GameLogBackupFiles[0]);
+}
+
+FString SentryFileUtils::GetGpuDumpPath()
+{
+	TArray<FString> GpuDumpFiles;
+	IFileManager::Get().FindFiles(GpuDumpFiles, *FString::Printf(TEXT("%s*.nv-gpudmp"), *FPaths::ProjectLogDir()), true, false);
+
+	if (GpuDumpFiles.Num() == 0)
+	{
+		UE_LOG(LogSentrySdk, Log, TEXT("There is no GPU dump file available."));
+		return FString("");
+	}
+
+	if (GpuDumpFiles.Num() > 1)
+	{
+		// By default, engine should handle clean up of GPU dumps  from the previous runs
+		UE_LOG(LogSentrySdk, Log, TEXT("There are multiple GPU dump files, can't determine reliably which one to pick."));
+		return FString("");
+	}
+
+	return IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*(FPaths::ProjectLogDir() / GpuDumpFiles[0]));
 }

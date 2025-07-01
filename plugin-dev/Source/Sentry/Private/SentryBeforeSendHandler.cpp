@@ -1,12 +1,13 @@
-// Copyright (c) 2023 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #include "SentryBeforeSendHandler.h"
 
-#include "SentryModule.h"
-#include "SentrySettings.h"
+#include "SentryAttachment.h"
 #include "SentryEvent.h"
 #include "SentryHint.h"
-#include "SentryAttachment.h"
+#include "SentryLibrary.h"
+#include "SentryModule.h"
+#include "SentrySettings.h"
 
 #include "Utils/SentryFileUtils.h"
 
@@ -16,7 +17,7 @@ USentryEvent* USentryBeforeSendHandler::HandleBeforeSend_Implementation(USentryE
 {
 	const USentrySettings* Settings = FSentryModule::Get().GetSettings();
 
-	if(Settings->EnableAutoLogAttachment)
+	if (Settings->EnableAutoLogAttachment && Hint != nullptr)
 	{
 #if PLATFORM_ANDROID || PLATFORM_APPLE
 		const FString LogFilePath = Event->IsCrash() ? SentryFileUtils::GetGameLogBackupPath() : SentryFileUtils::GetGameLogPath();
@@ -24,13 +25,9 @@ USentryEvent* USentryBeforeSendHandler::HandleBeforeSend_Implementation(USentryE
 		const FString LogFilePath = SentryFileUtils::GetGameLogPath();
 #endif
 
-		USentryAttachment* Attachment = NewObject<USentryAttachment>();
-		Attachment->InitializeWithPath(LogFilePath, FPaths::GetCleanFilename(LogFilePath), TEXT("application/octet-stream"));
-
-		if(Hint != nullptr)
-		{
-			Hint->AddAttachment(Attachment);
-		}
+		Hint->AddAttachment(
+			USentryLibrary::CreateSentryAttachmentWithPath(
+				LogFilePath, FPaths::GetCleanFilename(LogFilePath), TEXT("text/plain")));
 	}
 
 	return Event;

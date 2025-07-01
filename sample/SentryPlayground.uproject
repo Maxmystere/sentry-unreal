@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.2",
+	"EngineAssociation": "5.5",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -30,6 +30,10 @@
 		{
 			"Name": "EditorTests",
 			"Enabled": true
+		},
+		{
+			"Name": "WindowsMoviePlayer",
+			"Enabled": false
 		}
 	],
 	"TargetPlatforms": [
@@ -37,6 +41,7 @@
 		"IOS",
 		"Linux",
 		"Windows",
-		"Mac"
+		"Mac",
+		"LinuxArm64"
 	]
 }

@@ -1,13 +1,14 @@
-// Copyright (c) 2022 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "UObject/NoExportTypes.h"
 #include "Engine/EngineTypes.h"
+#include "UObject/NoExportTypes.h"
 #include "SentrySettings.generated.h"
 
 class USentryBeforeSendHandler;
+class USentryBeforeBreadcrumbHandler;
 class USentryTraceSampler;
 
 UENUM(BlueprintType)
@@ -27,6 +28,15 @@ enum class ESentryCliLogLevel : uint8
 	Info,
 	Warn,
 	Error
+};
+
+UENUM(BlueprintType)
+enum class ESentryDatabaseLocation : uint8
+{
+	// Root directory of the current project - `FPaths::ProjectDir()`
+	ProjectDirectory,
+	// Root directory for user-specific game files - `FPaths::ProjectUserDir()`
+	ProjectUserDirectory
 };
 
 USTRUCT(BlueprintType)
@@ -163,32 +173,6 @@ struct FEnableBuildTargets
 	bool bEnableProgram = true;
 };
 
-USTRUCT(BlueprintType)
-struct FEnableBuildPlatforms
-{
-	GENERATED_BODY()
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
-		Meta = (DisplayName = "Linux", ToolTip = "Flag indicating whether event capturing should be enabled for the Linux platform type."))
-	bool bEnableLinux = true;
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
-		Meta = (DisplayName = "Windows", ToolTip = "Flag indicating whether event capturing should be enabled for the Windows platform type."))
-	bool bEnableWindows = true;
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
-		Meta = (DisplayName = "IOS", ToolTip = "Flag indicating whether event capturing should be enabled for the IOS platform type."))
-	bool bEnableIOS = true;
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
-		Meta = (DisplayName = "Android", ToolTip = "Flag indicating whether event capturing should be enabled for the Android platform type."))
-	bool bEnableAndroid = true;
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
-		Meta = (DisplayName = "Mac", ToolTip = "Flag indicating whether event capturing should be enabled for the Mac platform type."))
-	bool bEnableMac = true;
-};
-
 /**
  * Sentry settings used for plugin configuration.
  */
@@ -205,17 +189,21 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "DSN", ToolTip = "The DSN (Data Source Name) tells the SDK where to send the events to. Get your DSN in the Sentry dashboard."))
 	FString Dsn;
 
-	UPROPERTY(Config, EditAnywhere, Category = "General",
-		Meta = (DisplayName = "Enable verbose logging", ToolTip = "Flag indicating whether to enable verbose logging on desktop."))
-	bool Debug;
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Editor DSN", ToolTip = "The Editor DSN (Data Source Name) if you want to isolate editor crashes from packaged game crashes, defaults to Dsn if not provided."))
+	FString EditorDsn;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General",
-		Meta = (DisplayName = "Override Windows default crash capturing mechanism (UE 5.2+)", ToolTip = "Flag indicating whether to capture crashes automatically on Windows as an alternative to Crash Reporter."))
-	bool EnableAutoCrashCapturing;
+		Meta = (DisplayName = "Enable verbose logging", ToolTip = "Flag indicating whether to enable verbose logging."))
+	bool Debug;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
 		Meta = (DisplayName = "Environment", ToolTip = "Environment which will be used for enriching events."))
 	FString Environment;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Distribution", ToolTip = "Distribution which will be used for enriching events."))
+	FString Dist;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General",
 		Meta = (DisplayName = "Sample rate", ToolTip = "Configures the sample rate for error events in the range of 0.0 to 1.0. The default is 1.0 which means that 100% of error events are sent. If set to 0.1 only 10% of error events will be sent. Events are picked randomly.", ClampMin = 0.0f, ClampMax = 1.0f))
@@ -234,8 +222,16 @@ class SENTRY_API USentrySettings : public UObject
 	bool SendDefaultPii;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Attachments",
-		Meta = (DisplayName = "Attach screenshots (for iOS only)", ToolTip = "Flag indicating whether to attach screenshot of the application when an error occurs."))
+		Meta = (DisplayName = "Attach screenshots", ToolTip = "Flag indicating whether to attach screenshot of the application when an error occurs. Currently this feature is supported for Windows and Linux only."))
 	bool AttachScreenshot;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Attachments",
+		Meta = (DisplayName = "Attach GPU dump", ToolTip = "Flag indicating whether to attach GPU crash dump when an error occurs. Currently this feature is supported for Nvidia graphics only."))
+	bool AttachGpuDump;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Attachments",
+		Meta = (DisplayName = "Max attachment size in bytes", Tooltip = "Max attachment size for each attachment in bytes. Default is 20 MiB compressed but this size is planned to be increased. Please also check the maximum attachment size of Relay to make sure your attachments don't get discarded there: https://docs.sentry.io/product/relay/options/"))
+	int32 MaxAttachmentSize;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Breadcrumbs",
 		Meta = (DisplayName = "Max breadcrumbs", Tooltip = "Total amount of breadcrumbs that should be captured."))
@@ -265,24 +261,40 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Override release name", ToolTip = "Release name which will be used for enriching events.", EditCondition = "OverrideReleaseName"))
 	FString Release;
 
-	UPROPERTY(Config, EditAnywhere, Category = "General|Transport",
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
 		Meta = (InlineEditConditionToggle))
 	bool UseProxy;
 
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Transport",
-		Meta = (DisplayName = "HTTP proxy (for Windows/Linux only)", ToolTip = "HTTP proxy through which requests can be tunneled to Sentry.", EditCondition = "UseProxy"))
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Native",
+		Meta = (DisplayName = "HTTP proxy", ToolTip = "HTTP proxy through which requests can be tunneled to Sentry.", EditCondition = "UseProxy"))
 	FString ProxyUrl;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Hooks",
-		Meta = (DisplayName = "Custom `beforeSend` event hanler", ToolTip = "Custom hanler for processing events before sending them to Sentry."))
+		Meta = (DisplayName = "Custom `beforeSend` event handler", ToolTip = "Custom handler for processing events before sending them to Sentry."))
 	TSubclassOf<USentryBeforeSendHandler> BeforeSendHandler;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Hooks",
+		Meta = (DisplayName = "Custom `beforeBreadcrumb` event handler", ToolTip = "Custom handler for processing breadcrumbs before adding them to the scope."))
+	TSubclassOf<USentryBeforeBreadcrumbHandler> BeforeBreadcrumbHandler;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Windows",
+		Meta = (DisplayName = "Override Windows default crash capturing mechanism (UE 5.2+)", ToolTip = "Flag indicating whether to capture crashes automatically on Windows as an alternative to Crash Reporter."))
+	bool EnableAutoCrashCapturing;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Sentry database location", ToolTip = "Location where Sentry stores its internal/temporary files."))
+	ESentryDatabaseLocation DatabaseLocation;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Delay app shutdown until crash report uploaded (for Crashpad only)", ToolTip = "Flag indicating whether Crashpad should delay application shutdown until the upload of the crash report is completed. It is useful in Docker environment where the life cycle of all processes is bound by the root process."))
+	bool CrashpadWaitForUpload;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Mobile",
 		Meta = (DisplayName = "In-app includes (for Android/Apple only)", Tooltip = "A list of string prefixes of module names that belong to the app."))
 	TArray<FString> InAppInclude;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Mobile",
-		Meta = (DisplayName = "In-app exludes (for Android/Apple only)", Tooltip = "A list of string prefixes of module names that don't belong to the app."))
+		Meta = (DisplayName = "In-app excludes (for Android/Apple only)", Tooltip = "A list of string prefixes of module names that don't belong to the app."))
 	TArray<FString> InAppExclude;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Mobile",
@@ -303,7 +315,7 @@ class SENTRY_API USentrySettings : public UObject
 	float TracesSampleRate;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Performance Monitoring",
-		Meta = (DisplayName = "Traces sampler", ToolTip = "Custom hanler for determining traces sample rate based on the sampling context.",
+		Meta = (DisplayName = "Traces sampler", ToolTip = "Custom handler for determining traces sample rate based on the sampling context.",
 			EditCondition = "EnableTracing && SamplingType == ESentryTracesSamplingType::TracesSampler", EditConditionHides))
 	TSubclassOf<USentryTraceSampler> TracesSampler;
 
@@ -319,10 +331,6 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Enable for Build Target Types"))
 	FEnableBuildTargets EnableBuildTargets;
 
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Misc",
-		Meta = (DisplayName = "Enable for Build Platform Types"))
-	FEnableBuildPlatforms EnableBuildPlatforms;
-
 	UPROPERTY(Config, EditAnywhere, Category = "General|Misc",
 		Meta = (DisplayName = "Enable for promoted builds only", ToolTip = "Flag indicating whether to enable for promoted builds only."))
 	bool EnableForPromotedBuildsOnly;
@@ -336,7 +344,7 @@ class SENTRY_API USentrySettings : public UObject
 	FString ProjectName;
 
 	UPROPERTY(EditAnywhere, Category = "Debug Symbols",
-		Meta = (DisplayName = "Organization Name", ToolTip = "Name of the organisation associated with the project.", EditCondition = "UploadSymbolsAutomatically"))
+		Meta = (DisplayName = "Organization Name", ToolTip = "Name of the organization associated with the project.", EditCondition = "UploadSymbolsAutomatically"))
 	FString OrgName;
 
 	UPROPERTY(EditAnywhere, Category = "Debug Symbols",
@@ -350,6 +358,11 @@ class SENTRY_API USentrySettings : public UObject
 	UPROPERTY(Config, EditAnywhere, Category = "Debug Symbols",
 		Meta = (DisplayName = "Diagnostic Level", ToolTip = "Logs verbosity level during symbol uploading.", EditCondition = "UploadSymbolsAutomatically"))
 	ESentryCliLogLevel DiagnosticLevel;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Debug Symbols",
+		Meta = (DisplayName = "Use legacy Sentry Gradle plugin (for Android only)", ToolTip = "Flag indicating whether to use legacy Sentry Gradle plugin for debug symbol upload. No engine's Gradle version bump is required if enabled. This can be used as a fallback if the newer Gradle 7.5 causing compatibility issues with other third-party plugins.",
+			EditCondition = "UploadSymbolsAutomatically"))
+	bool UseLegacyGradlePlugin;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Crash Reporter",
 		Meta = (DisplayName = "Crash Reporter Endpoint", ToolTip = "Endpoint that Unreal Engine Crah Reporter should use in order to upload crash data to Sentry."))

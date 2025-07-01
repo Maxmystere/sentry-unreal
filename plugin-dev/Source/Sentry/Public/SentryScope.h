@@ -1,8 +1,9 @@
-// Copyright (c) 2022 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #pragma once
 
 #include "SentryDataTypes.h"
+#include "SentryImplWrapper.h"
 
 #include "SentryScope.generated.h"
 
@@ -13,13 +14,15 @@ class USentryAttachment;
 /**
  * Scope data to be sent with the event.
  */
-UCLASS(BlueprintType)
-class SENTRY_API USentryScope : public UObject
+UCLASS(BlueprintType, NotBlueprintable, HideDropdown)
+class SENTRY_API USentryScope : public UObject, public TSentryImplWrapper<ISentryScope, USentryScope>
 {
 	GENERATED_BODY()
 
 public:
-	USentryScope();
+	/** Initializes the scope. */
+	UFUNCTION(BlueprintCallable, Category = "Sentry")
+	void Initialize();
 
 	/** Adds a breadcrumb to the current Scope. */
 	UFUNCTION(BlueprintCallable, Category = "Sentry")
@@ -55,23 +58,7 @@ public:
 
 	/** Gets a global tags. Tags are searchable key/value string pairs attached to every event. */
 	UFUNCTION(BlueprintPure, Category = "Sentry")
-	TMap<FString, FString> GetTags() const;	
-
-	/** Sets dist in the scope. */
-	UFUNCTION(BlueprintCallable, Category = "Sentry")
-	void SetDist(const FString& Dist);
-
-	/** Gets dist in the scope. */
-	UFUNCTION(BlueprintPure, Category = "Sentry")
-	FString GetDist() const;
-
-	/** Sets environment in the scope. */
-	UFUNCTION(BlueprintCallable, Category = "Sentry")
-	void SetEnvironment(const FString& Environment);
-
-	/** Gets environment in the scope. */
-	UFUNCTION(BlueprintCallable, Category = "Sentry")
-	FString GetEnvironment() const;
+	TMap<FString, FString> GetTags() const;
 
 	/** Sets fingerprint in the scope. */
 	UFUNCTION(BlueprintCallable, Category = "Sentry")
@@ -120,12 +107,6 @@ public:
 	/** Clears the current scope. */
 	UFUNCTION(BlueprintCallable, Category = "Sentry")
 	void Clear();
-
-	void InitWithNativeImpl(TSharedPtr<ISentryScope> scopeImpl);
-	TSharedPtr<ISentryScope> GetNativeImpl();
-
-private:
-	TSharedPtr<ISentryScope> ScopeNativeImpl;
 };
 
 DECLARE_DELEGATE_OneParam(FConfigureScopeNativeDelegate, USentryScope*);

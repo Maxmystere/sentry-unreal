@@ -33,6 +33,9 @@ The SDK currently supports and is tested on the following platforms:
 
 The SDK compiles with three latest engine versions.
 
+Blog posts:
+* [Building the Sentry Unreal Engine SDK with GitHub Actions](https://blog.sentry.io/building-the-sentry-unreal-engine-sdk-with-github-actions/)
+
 ## Known Limitations
 
 - On all platforms captured crashes are uploaded to Sentry only after relaunching the crashed app since the in-process handler cannot do this within the same session. The only exceptions are Windows (if using the GitHub package) and Linux for which the out-of-process crashpad handler is used and crashes are uploaded immediately.
@@ -50,9 +53,18 @@ The SDK compiles with three latest engine versions.
 
 - Only crash events captured on Android contain the full callstack. Events that were captured manually won't have the native C++ part there.
 
-- On Linux `sudo apt-get install libc++-dev libcurl-dev` is required to install the `Crashpad` dependencies. This list may vary depending on your Linux distro. See the [Crashpad documentation](https://chromium.googlesource.com/crashpad/crashpad/+/refs/heads/main/doc/developing.md#prerequisites) for more details.
+- `BeforeSendHandler` and `BeforeBreadcrumbHandler` hooks will not be invoked during garbage collection.
 
-- On Windows/Linux if crash event was captured during the garbage collection the `BeforeSendHandler` will not be invoked.
+- It may be required to upgrade the C++ standard library (`libstdc++`) on older Linux distributions (such as Ubuntu 18.04 and 20.04) to ensure crashpad handler proper functionality within the deployment environment. This can be achieved with something like this:
+```
+sudo apt-get update
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+sudo apt-get install -y libstdc++6
+```
+
+- Plugin supports Linux arm64 platform for UE 5.0 and newer.
+
+- Fast-fail crash capturing is currently supported only in packaged game builds when using the `github` plugin version. When a fast-fail crash occurs the `HandleBeforeSend` hook will not be invoked and any custom event pre-processing will be skipped. Also, captured fast-fail crash events will not include UE-specific tags or context.
 
 ## Development
 

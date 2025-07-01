@@ -1,9 +1,12 @@
-// Copyright (c) 2022 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #include "SentryTests.h"
 #include "SentryBreadcrumb.h"
+#include "SentryTests.h"
 
 #include "Misc/AutomationTest.h"
+
+#include "HAL/PlatformSentryBreadcrumb.h"
 
 #if WITH_AUTOMATION_TESTS
 
@@ -15,7 +18,7 @@ void SentryBreadcrumbSpec::Define()
 {
 	BeforeEach([this]()
 	{
-		SentryBreadcrumb = NewObject<USentryBreadcrumb>();
+		SentryBreadcrumb = USentryBreadcrumb::Create(CreateSharedSentryBreadcrumb());
 	});
 
 	Describe("Breadcrumb params", [this]()

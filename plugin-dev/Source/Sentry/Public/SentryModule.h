@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Sentry. All Rights Reserved.
+// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #pragma once
 
@@ -29,9 +29,6 @@ public:
 	 */
 	static bool IsAvailable();
 
-	/** Gets Sentry library handle for manual symbols loading. */
-	void* GetSentryLibHandle() const;
-
 	/** Gets internal settings object to support runtime configuration changes. */
 	USentrySettings* GetSettings() const;
 
@@ -54,6 +51,4 @@ public:
 private:
 	static FSentryModule* Myself;
 	USentrySettings* SentrySettings = nullptr;
-
-	void* mDllHandleSentry;
 };

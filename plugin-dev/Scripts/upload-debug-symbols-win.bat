@@ -17,26 +17,24 @@ echo Sentry: Start debug symbols upload
 
 if "%TargetType%"=="Editor" (
     echo Sentry: Automatic symbols upload is not required for Editor target. Skipping...
-    exit
+    exit /B 0
 )
 
-if "%TargetPlatform%"=="Win64" (
-    set CliExec=%PluginPath:"=%\Source\ThirdParty\CLI\sentry-cli-Windows-x86_64.exe
-) else if "%TargetPlatform%"=="Linux" (
-    set CliExec=%PluginPath:"=%\Source\ThirdParty\CLI\sentry-cli-Windows-x86_64.exe
-) else if "%TargetPlatform%"=="Android" (
-    echo Warning: Sentry: Debug symbols upload for Android is handled by Sentry's gradle plugin if enabled
-    exit
-) else (
-    echo Warning: Sentry: Unexpected platform %TargetPlatform%. Skipping...
-    exit
+if "%TargetPlatform%"=="Android" (
+	echo Sentry: Debug symbols upload for Android is handled by Sentry's Gradle plugin if enabled
+	exit /B 0
 )
 
 call :ParseIniFile "%ConfigPath%\DefaultEngine.ini" /Script/Sentry.SentrySettings UploadSymbolsAutomatically UploadSymbols
 
+if /i "%SENTRY_UPLOAD_SYMBOLS_AUTOMATICALLY%" NEQ "" (
+  set UploadSymbols=%SENTRY_UPLOAD_SYMBOLS_AUTOMATICALLY%
+  echo Sentry: Automatic symbols upload settings were overridden via environment variable SENTRY_UPLOAD_SYMBOLS_AUTOMATICALLY with value '%SENTRY_UPLOAD_SYMBOLS_AUTOMATICALLY%'
+)
+
 if /i "%UploadSymbols%" NEQ "True" (
-    echo Sentry: Automatic symbols upload is disabled in plugin settings. Skipping...
-    exit
+    echo Sentry: Automatic symbols upload is disabled. Skipping...
+    exit /B 0
 )
 
 call :ParseIniFile "%ConfigPath%\DefaultEngine.ini" /Script/Sentry.SentrySettings IncludeSources IncludeSourceFiles
@@ -54,28 +52,13 @@ if "%CliLogLevel%"=="" (
     set "CliLogLevel=info"
 )
 
-call :ParseIniFile "%ConfigPath%\DefaultEngine.ini" /Script/Sentry.SentrySettings EnableBuildPlatforms EnabledPlatforms
-if not "%EnabledPlatforms%"=="" (
-  set PlatformToCheck=
-  if "%TargetPlatform%"=="Win64" (
-    set "PlatformToCheck=bEnableWindows=False"
-  ) else (
-    set "PlatformToCheck=bEnable%TargetPlatform%=False"
-  )
-  call :FindString EnabledPlatforms PlatformToCheck IsPlatformDisabled
-  if "!IsPlatformDisabled!"=="true" (
-      echo "Sentry: Automatic symbols upload is disabled for build platform %TargetPlatform%. Skipping..."
-      exit
-  )
-)
-
 call :ParseIniFile "%ConfigPath%\DefaultEngine.ini" /Script/Sentry.SentrySettings EnableBuildTargets EnabledTargets
 if not "%EnabledTargets%"=="" (
   set TargetToCheck="bEnable%TargetType%=False"
   call :FindString EnabledTargets TargetToCheck IsTargetDisabled
   if "!IsTargetDisabled!"=="true" (
       echo "Sentry: Automatic symbols upload is disabled for build target type %TargetType%. Skipping..."
-      exit
+      exit /B 0
   )
 )
 
@@ -85,36 +68,64 @@ if not "%EnabledConfigurations%"=="" (
   call :FindString EnabledConfigurations ConfigToCheck IsConfigDisabled
   if "!IsConfigDisabled!"=="true" (
       echo "Sentry: Automatic symbols upload is disabled for build configuration %TargetConfig%. Skipping..."
-      exit
+      exit /B 0
   )
+)
+
+set CliExec=%PluginPath:"=%\Source\ThirdParty\CLI\sentry-cli-Windows-x86_64.exe
+
+if not exist "%CliExec%" (
+    echo Error: Sentry: Sentry CLI is missing. Skipping...
+    exit /B 0
 )
 
 set PropertiesFile=%ProjectPath:"=%\sentry.properties
 
-if not exist "%PropertiesFile%" (
-    echo Warning: Sentry: Properties file is missing: '%PropertiesFile%'
-    exit
+echo Sentry: Looking for properties file '%PropertiesFile%'
+
+if exist "%PropertiesFile%" (
+    echo Sentry: Properties file found. Starting upload...
+    call :ParseIniFile "%PropertiesFile%" Sentry defaults.project ProjectName
+    if "!ProjectName!"=="" (
+        echo Error: Project name is not set. Skipping...
+        exit /B 0
+    )
+    call :ParseIniFile "%PropertiesFile%" Sentry defaults.org OrgName
+    if "!OrgName!"=="" ( 
+        echo Error: Project organization is not set. Skipping...
+        exit /B 0
+    )
+    call :ParseIniFile "%PropertiesFile%" Sentry auth.token AuthToken
+    if "!AuthToken!"=="" (
+        echo Error: Auth token is not set. Skipping...
+        exit /B 0
+    )
+    set "SENTRY_PROPERTIES=%PropertiesFile%"
+) else (
+    echo Sentry: Properties file not found. Falling back to environment variables.
+    if /i "%SENTRY_PROJECT%"=="" (
+        echo Error: SENTRY_PROJECT env var is not set. Skipping...
+        exit /B 0
+    )
+    if /i "%SENTRY_ORG%"=="" (
+        echo Error: SENTRY_ORG env var is not set. Skipping...
+        exit /B 0
+    )
+    if /i "%SENTRY_AUTH_TOKEN%"=="" (
+        echo Error: SENTRY_AUTH_TOKEN env var is not set. Skipping...
+        exit /B 0
+    )
 )
 
-if not exist "%CliExec%" (
-    echo Warning: Sentry: Sentry CLI is not configured in plugin settings. Skipping...
-    exit
-)
-
-echo Sentry: Upload started using PropertiesFile '%PropertiesFile%'
-
-set "SENTRY_PROPERTIES=%PropertiesFile%"
-echo %ProjectBinariesPath%
-echo %PluginBinariesPath%
-call "%CliExec%" upload-dif %CliArgs% --log-level %CliLogLevel% "%ProjectBinariesPath%" "%PluginBinariesPath%"
+call "%CliExec%" debug-files upload %CliArgs% --log-level %CliLogLevel% "%ProjectBinariesPath%" "%PluginBinariesPath%"
 
 echo Sentry: Upload finished
 
 endlocal
-exit
+exit /B 0
 
 :FindString <sourceStr> <findStr> <result>
-  setlocal  
+  setlocal
   for /f "delims=" %%A in ('echo %%%1%%') do set str1=%%A
   for /f "delims=" %%A in ('echo %%%2%%') do set str2=%%A
   echo.%str1%|findstr /C:"%str2%" >nul 2>&1
@@ -123,7 +134,18 @@ exit
     set %~3=true
   ) else (
     set %~3=false
-  )  
+  )
+  goto :eof
+
+:FindInFile <filePath> <findStr> <result>
+  setlocal
+  for /f "tokens=*" %%A in ('findstr /i /r "%~2" "%~1"') do (
+    endlocal
+    set %~3=true
+    goto :eof
+  )
+  endlocal
+  set %~3=false
   goto :eof
 
 :ParseIniFile <filename> <section> <key> <result>

@@ -1,21 +1,24 @@
-﻿// Copyright (c) 2022 Sentry. All Rights Reserved.
+﻿// Copyright (c) 2025 Sentry. All Rights Reserved.
 
 #include "SentryTests.h"
 #include "SentryScope.h"
 #include "SentryEvent.h"
+#include "SentryScopeBeforeSendHandler.h"
+#include "SentryTests.h"
 
+#include "Engine/Engine.h"
 #include "SentryDataTypes.h"
-
-#include "Interface/SentryScopeInterface.h"
-#include "Interface/SentryEventInterface.h"
+#include "SentrySettings.h"
+#include "SentrySubsystem.h"
 
 #include "Misc/AutomationTest.h"
 
-#if PLATFORM_WINDOWS || PLATFORM_LINUX
-#include "Desktop/SentryScopeDesktop.h"
-#include "Desktop/SentryEventDesktop.h"
-#include "Desktop/Infrastructure/SentryConvertorsDesktop.h"
-#endif
+#include "HAL/PlatformSentryEvent.h"
+#include "HAL/PlatformSentryScope.h"
+
+#include "GenericPlatform/Infrastructure/GenericPlatformSentryConverters.h"
+
+TDelegate<void(USentryEvent*)> UScopeTestBeforeSendHandler::OnScopeTestBeforeSendHandler;
 
 #if WITH_AUTOMATION_TESTS
 
@@ -33,10 +36,7 @@ void SentryScopeSpec::Define()
 {
 	BeforeEach([this]()
 	{
-		SentryScope = NewObject<USentryScope>();
-
-		TestDist = TEXT("dist_str");
-		TestEnvironment = TEXT("env_str");
+		SentryScope = USentryScope::Create(CreateSharedSentryScope());
 
 		TestTags.Add(TEXT("TagsKey1"), TEXT("TagsVal1"));
 		TestTags.Add(TEXT("TagsKey2"), TEXT("TagsVal2"));
@@ -47,7 +47,9 @@ void SentryScopeSpec::Define()
 		TestContext.Add(TEXT("ContextKey1"), TEXT("ContextVal1"));
 		TestContext.Add(TEXT("ContextKey2"), TEXT("ContextVal2"));
 
-		TestFingerprint = { TEXT("F1"), TEXT("F2"), TEXT("F3") };
+		TestFingerprint.Add(TEXT("F1"));
+		TestFingerprint.Add(TEXT("F2"));
+		TestFingerprint.Add(TEXT("F3"));
 	});
 
 	Describe("Scope tags", [this]()
@@ -111,13 +113,9 @@ void SentryScopeSpec::Define()
 		It("should persist their values", [this]()
 		{
 			SentryScope->SetLevel(ESentryLevel::Fatal);
-			SentryScope->SetDist(TestDist);
-			SentryScope->SetEnvironment(TestEnvironment);
 			SentryScope->SetFingerprint(TestFingerprint);
 
 			TestEqual("Scope level", SentryScope->GetLevel(), ESentryLevel::Fatal);
-			TestEqual("Scope dist", SentryScope->GetDist(), TestDist);
-			TestEqual("Scope environment", SentryScope->GetEnvironment(), TestEnvironment);
 			TestEqual("Scope fingerprint", SentryScope->GetFingerprint(), TestFingerprint);
 		});
 	});
@@ -126,63 +124,66 @@ void SentryScopeSpec::Define()
 	{
 		It("should be possible to clear", [this]()
 		{
-			SentryScope->SetDist(TestDist);
-			SentryScope->SetEnvironment(TestEnvironment);
 			SentryScope->SetFingerprint(TestFingerprint);
 			SentryScope->SetTags(TestTags);
 			SentryScope->SetExtras(TestExtras);
 
 			SentryScope->Clear();
 
-			TestTrue("Scope dist", SentryScope->GetDist().IsEmpty());
-			TestTrue("Scope environment", SentryScope->GetEnvironment().IsEmpty());
 			TestTrue("Scope fingerprint", SentryScope->GetFingerprint().Num() == 0);
 			TestTrue("Scope tags", SentryScope->GetTags().Num() == 0);
 			TestTrue("Scope extras", SentryScope->GetExtras().Num() == 0);
 		});
 	});
 
-#if (PLATFORM_WINDOWS || PLATFORM_LINUX) && USE_SENTRY_NATIVE
+#if (PLATFORM_MICROSOFT || PLATFORM_LINUX) && USE_SENTRY_NATIVE
 	Describe("Scope params", [this]()
 	{
 		It("should be applied to event", [this]()
 		{
-			SentryScope->SetLevel(ESentryLevel::Fatal);
-			SentryScope->SetDist(TestDist);
-			SentryScope->SetEnvironment(TestEnvironment);
-			SentryScope->SetFingerprint(TestFingerprint);
-			SentryScope->SetTags(TestTags);
-			SentryScope->SetExtras(TestExtras);
-			SentryScope->SetContext(TEXT("TestContext"), TestContext);
+			USentrySubsystem* SentrySubsystem = GEngine->GetEngineSubsystem<USentrySubsystem>();
+			SentrySubsystem->InitializeWithSettings(FConfigureSettingsNativeDelegate::CreateLambda([=](USentrySettings* Settings)
+			{
+				Settings->BeforeSendHandler = UScopeTestBeforeSendHandler::StaticClass();
+			}));
 
-			USentryEvent* SentryEvent = NewObject<USentryEvent>();
+			UScopeTestBeforeSendHandler::OnScopeTestBeforeSendHandler.BindLambda([this](USentryEvent* SentryEvent)
+			{
+				TSharedPtr<FGenericPlatformSentryEvent> Event = StaticCastSharedPtr<FGenericPlatformSentryEvent>(SentryEvent->GetNativeObject());
 
-			TSharedPtr<SentryEventDesktop> EventDesktop = StaticCastSharedPtr<SentryEventDesktop>(SentryEvent->GetNativeImpl());
+				sentry_value_t NativeEvent = Event->GetNativeObject();
 
-			StaticCastSharedPtr<SentryScopeDesktop>(SentryScope->GetNativeImpl())->Apply(EventDesktop);
+				sentry_value_t level = sentry_value_get_by_key(NativeEvent, "level");
+				sentry_value_t fingerprint = sentry_value_get_by_key(NativeEvent, "fingerprint");
+				sentry_value_t tags = sentry_value_get_by_key(NativeEvent, "tags");
+				sentry_value_t extra = sentry_value_get_by_key(NativeEvent, "extra");
+				sentry_value_t contexts = sentry_value_get_by_key(NativeEvent, "contexts");
 
-			sentry_value_t NativeEvent = EventDesktop->GetNativeObject();
+				sentry_value_t testContext = sentry_value_get_by_key(contexts, "TestContext");
 
-			sentry_value_t level = sentry_value_get_by_key(NativeEvent, "level");
-			sentry_value_t dist = sentry_value_get_by_key(NativeEvent, "dist");
-			sentry_value_t environment = sentry_value_get_by_key(NativeEvent, "environment");
-			sentry_value_t fingerprint = sentry_value_get_by_key(NativeEvent, "fingerprint");
-			sentry_value_t tags = sentry_value_get_by_key(NativeEvent, "tags");
-			sentry_value_t extra = sentry_value_get_by_key(NativeEvent, "extra");
+				TestEqual("Event level", FGenericPlatformSentryConverters::SentryLevelToUnreal(level), ESentryLevel::Fatal);
+				TestEqual("Event fingerprint", FGenericPlatformSentryConverters::StringArrayToUnreal(fingerprint), TestFingerprint);
+				TestEqual("Event tags 1", FGenericPlatformSentryConverters::StringMapToUnreal(tags)[TEXT("TagsKey1")], TestTags[TEXT("TagsKey1")]);
+				TestEqual("Event tags 2", FGenericPlatformSentryConverters::StringMapToUnreal(tags)[TEXT("TagsKey2")], TestTags[TEXT("TagsKey2")]);
+				TestEqual("Event extra 1", FGenericPlatformSentryConverters::StringMapToUnreal(extra)[TEXT("ExtrasKey1")], TestExtras[TEXT("ExtrasKey1")]);
+				TestEqual("Event extra 2", FGenericPlatformSentryConverters::StringMapToUnreal(extra)[TEXT("ExtrasKey2")], TestExtras[TEXT("ExtrasKey2")]);
+				TestEqual("Event context 1", FGenericPlatformSentryConverters::StringMapToUnreal(testContext)[TEXT("ContextKey1")], TestContext[TEXT("ContextKey1")]);
+				TestEqual("Event context 2", FGenericPlatformSentryConverters::StringMapToUnreal(testContext)[TEXT("ContextKey2")], TestContext[TEXT("ContextKey2")]);
+			});
 
-			sentry_value_t contexts = sentry_value_get_by_key(NativeEvent, "contexts");
-			sentry_value_t testContext = sentry_value_get_by_key(contexts, "TestContext");
+			USentryEvent* SentryEvent = USentryEvent::Create(CreateSharedSentryEvent());
+			SentrySubsystem->CaptureEventWithScope(SentryEvent, FConfigureScopeNativeDelegate::CreateLambda([this](USentryScope* Scope)
+			{
+				Scope->SetLevel(ESentryLevel::Fatal);
+				Scope->SetFingerprint(TestFingerprint);
+				Scope->SetTags(TestTags);
+				Scope->SetExtras(TestExtras);
+				Scope->SetContext(TEXT("TestContext"), TestContext);
+			}));
 
-			TestEqual("Event level", SentryConvertorsDesktop::SentryLevelToUnreal(level), ESentryLevel::Fatal);
-			TestEqual("Event dist", FString(sentry_value_as_string(dist)), TestDist);
-			TestEqual("Event environment", FString(sentry_value_as_string(environment)), TestEnvironment);
-			TestEqual("Event fingerprint", SentryConvertorsDesktop::StringArrayToUnreal(fingerprint), TestFingerprint);
-			TestEqual("Event tags 1", SentryConvertorsDesktop::StringMapToUnreal(tags)[TEXT("TagsKey1")], TestTags[TEXT("TagsKey1")]);
-			TestEqual("Event tags 2", SentryConvertorsDesktop::StringMapToUnreal(tags)[TEXT("TagsKey2")], TestTags[TEXT("TagsKey2")]);
-			TestEqual("Event extra 1", SentryConvertorsDesktop::StringMapToUnreal(extra)[TEXT("ExtrasKey1")], TestExtras[TEXT("ExtrasKey1")]);
-			TestEqual("Event extra 2", SentryConvertorsDesktop::StringMapToUnreal(extra)[TEXT("ExtrasKey2")], TestExtras[TEXT("ExtrasKey2")]);
-			TestEqual("Event context 1", SentryConvertorsDesktop::StringMapToUnreal(testContext)[TEXT("ContextKey1")], TestContext[TEXT("ContextKey1")]);
-			TestEqual("Event context 2", SentryConvertorsDesktop::StringMapToUnreal(testContext)[TEXT("ContextKey2")], TestContext[TEXT("ContextKey2")]);
+			UScopeTestBeforeSendHandler::OnScopeTestBeforeSendHandler.Unbind();
+
+			SentrySubsystem->Close();
 		});
 	});
 #endif
