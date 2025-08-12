@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- Bump CLI from v2.46.0 to v2.51.1 ([#13](https://github.com/Maxmystere/sentry-unreal/pull/13))
+  - [changelog](https://github.com/getsentry/sentry-cli/blob/master/CHANGELOG.md#2511)
+  - [diff](https://github.com/getsentry/sentry-cli/compare/2.46.0...2.51.1)
+
 ## 1.0.0-beta.4
 
 ### Breaking Changes
