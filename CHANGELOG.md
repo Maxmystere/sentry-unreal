@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- Bump Android Gradle Plugin from v5.8.0 to v5.12.2 ([#48](https://github.com/Maxmystere/sentry-unreal/pull/48))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#5122)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/5.8.0...5.12.2)
+
 ## 1.0.0-beta.4
 
 ### Breaking Changes
