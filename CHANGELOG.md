@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- Bump Cocoa SDK (iOS and Mac) from v8.53.1 to v9.25.0 ([#188](https://github.com/Maxmystere/sentry-unreal/pull/188))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9250)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/8.53.1...9.25.0)
+
 ## 1.0.0-beta.4
 
 ### Breaking Changes
